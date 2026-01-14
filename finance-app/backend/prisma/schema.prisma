@@ -1,0 +1,233 @@
+generator client {
+  provider = "prisma-client-js"
+  
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enumerações
+enum TipoTransacao {
+  RECEITA
+  DESPESA
+  TRANSFERENCIA
+}
+
+enum StatusTransacao {
+  PENDENTE
+  CONCLUIDA
+  CANCELADA
+}
+
+enum CategoriaTipo {
+  ALIMENTACAO
+  TRANSPORTE
+  MORADIA
+  SAUDE
+  EDUCACAO
+  LAZER
+  INVESTIMENTO
+  OUTROS
+}
+
+enum PeriodicidadeMeta {
+  DIARIA
+  SEMANAL
+  MENSAL
+  ANUAL
+}
+
+// Modelo Usuário
+model User {
+  id            String    @id @default(uuid())
+  nome          String
+  email         String    @unique
+  senhaHash     String
+  cpf           String?   @unique
+  telefone      String?
+  dataNascimento DateTime?
+  avatarUrl     String?
+  ativo         Boolean   @default(true)
+  emailVerificado Boolean @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  // Relações
+  transacoes    Transacao[]
+  categorias    Categoria[]
+  metas         Meta[]
+  orcamentos    Orcamento[]
+  documentos    Documento[]
+  notificacoes  Notificacao[]
+  contas        Conta[]
+
+  @@map("users")
+}
+
+// Modelo Transação
+model Transacao {
+  id            String    @id @default(uuid())
+  descricao     String
+  valor         Decimal   @db.Decimal(10, 2)
+  tipo          TipoTransacao
+  data          DateTime  @default(now())
+  status        StatusTransacao @default(CONCLUIDA)
+  observacoes   String?
+  tags          String[]  // Array de tags para organização
+  recorrente    Boolean   @default(false)
+  recorrenciaId String?   // Para agrupar transações recorrentes
+
+  // Relações
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoriaId   String?
+  categoria     Categoria? @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
+  contaId       String?
+  conta         Conta?    @relation(fields: [contaId], references: [id], onDelete: SetNull)
+  metaId        String?
+  meta          Meta?     @relation(fields: [metaId], references: [id], onDelete: SetNull)
+  documentos    Documento[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+
+  @@index([userId])
+  @@index([data])
+  @@index([tipo])
+  @@map("transacoes")
+}
+
+// Modelo Categoria
+model Categoria {
+  id            String    @id @default(uuid())
+  nome          String
+  descricao     String?
+  tipo          CategoriaTipo
+  cor           String    @default("#3B82F6") // Cor para UI
+  icone         String    @default("📊")      // Ícone para UI
+  orcamentoPadrao Decimal? @db.Decimal(10, 2)
+
+  // Relações
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transacoes    Transacao[]
+  orcamentos    Orcamento[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([userId, nome])
+  @@map("categorias")
+}
+
+// Modelo Conta Bancária
+model Conta {
+  id            String    @id @default(uuid())
+  nome          String
+  instituicao   String
+  tipo          String    // Corrente, Poupança, Investimento, etc.
+  saldoInicial  Decimal   @db.Decimal(10, 2) @default(0)
+  saldoAtual    Decimal   @db.Decimal(10, 2)
+  cor           String    @default("#10B981")
+  ativo         Boolean   @default(true)
+
+  // Relações
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transacoes    Transacao[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("contas")
+}
+
+// Modelo Meta Financeira
+model Meta {
+  id            String    @id @default(uuid())
+  titulo        String
+  descricao     String?
+  valorAlvo     Decimal   @db.Decimal(10, 2)
+  valorAtual    Decimal   @db.Decimal(10, 2) @default(0)
+  dataInicio    DateTime
+  dataFim       DateTime
+  periodicidade PeriodicidadeMeta @default(MENSAL)
+  cor           String    @default("#8B5CF6")
+  concluida     Boolean   @default(false)
+
+  // Relações
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transacoes    Transacao[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("metas")
+}
+
+// Modelo Orçamento
+model Orcamento {
+  id            String    @id @default(uuid())
+  mes           Int
+  ano           Int
+  valor         Decimal   @db.Decimal(10, 2)
+  valorUtilizado Decimal  @db.Decimal(10, 2) @default(0)
+
+  // Relações
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoriaId   String
+  categoria     Categoria @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([userId, categoriaId, mes, ano])
+  @@map("orcamentos")
+}
+
+// Modelo Documento (comprovantes)
+model Documento {
+  id            String    @id @default(uuid())
+  nomeArquivo   String
+  tipoArquivo   String
+  tamanho       Int
+  url           String
+  descricao     String?
+
+  // Relações
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transacaoId   String?
+  transacao     Transacao? @relation(fields: [transacaoId], references: [id], onDelete: SetNull)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("documentos")
+}
+
+// Modelo Notificação
+model Notificacao {
+  id            String    @id @default(uuid())
+  titulo        String
+  mensagem      String
+  tipo          String    // info, alerta, sucesso, erro
+  lida          Boolean   @default(false)
+  link          String?
+
+  // Relações
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId, lida])
+  @@map("notificacoes")
+}

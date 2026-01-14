@@ -1,0 +1,55 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2024-01-08T10:30:00.000Z",
+  "__export_source": "insomnia.desktop.app:v2023.5.8",
+  "resources": [
+    {
+      "_id": "req_meu_financeiro",
+      "parentId": "wrk_meu_financeiro",
+      "modified": 1704702600000,
+      "created": 1704702600000,
+      "url": "{{ base_url }}",
+      "name": "API Meu Financeiro",
+      "description": "Coleção para testar o backend do Meu Financeiro",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": -1704702600000,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "env_meu_financeiro",
+      "parentId": "wrk_meu_financeiro",
+      "modified": 1704702600000,
+      "created": 1704702600000,
+      "name": "Base Environment",
+      "data": {
+        "base_url": "http://localhost:3001"
+      },
+      "dataPropertyOrder": {},
+      "color": null,
+      "isPrivate": false,
+      "metaSortKey": -1704702600000,
+      "_type": "environment"
+    },
+    {
+      "_id": "wrk_meu_financeiro",
+      "modified": 1704702600000,
+      "created": 1704702600000,
+      "name": "Meu Financeiro Backend",
+      "description": "Testes do backend do sistema financeiro",
+      "scope": "collection",
+      "_type": "workspace"
+    }
+  ]
+}
