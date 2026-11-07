@@ -228,7 +228,9 @@ function txForm(t0 = {}, preset = {}) {
       { k: 'status', label: 'Situação', type: 'select', w: 2, options: d => [['pago', d.type === 'R' ? 'Recebido' : 'Pago / efetivado'], ['pendente', d.type === 'R' ? 'A receber' : 'A pagar']], when: d => !isCard(d) },
       { k: 'due', label: 'Vencimento', type: 'date', w: 2, when: d => !isCard(d) && d.status === 'pendente' },
       { k: 'paidDate', label: 'Data do pagamento', type: 'date', w: 2, when: d => !isCard(d) && d.status === 'pago' && editing },
-      { k: 'parc', label: 'Parcelas', type: 'number', w: 2, when: d => isCard(d) && !editing && d.type === 'D', hint: 'Divide o valor total' },
+      { k: 'parc', label: 'Nº de parcelas', type: 'number', w: 2, when: d => isCard(d) && !editing && d.type === 'D', hint: 'Valor = total da compra' },
+      { k: 'startInst', label: 'Começar da parcela nº', type: 'number', w: 2, when: d => isCard(d) && !editing && d.type === 'D' && +d.parc > 1, hint: 'Parcelamento já em andamento' },
+      { k: 'firstRef', label: 'Fatura dessa parcela', type: 'month', w: 2, when: d => isCard(d) && !editing && d.type === 'D' && +d.parc > 1, hint: 'Confira na fatura do banco' },
       { k: 'rep', label: 'Repetir (meses)', type: 'number', w: 2, when: d => !isCard(d) && !editing && d.type !== 'T', hint: 'Contas fixas / recorrentes' },
       { k: 'invoice', label: 'Fatura (mês de venc.)', type: 'month', w: 2, when: d => isCard(d) && editing },
       { k: 'cat', label: 'Categoria', type: 'select', w: 3, req: true, options: d => [['', 'Selecione…'], ...catsOf(d.type === 'R' ? 'R' : 'D').map(c => c.name)], when: d => d.type !== 'T' },
@@ -243,7 +245,11 @@ function txForm(t0 = {}, preset = {}) {
     },
     onChange(d) {
       const h = $('#txHint'); if (!h) return;
-      if (isCard(d) && d.date) { const c = S.cards.get(d.src.slice(5)); if (c) { const ref = d.invoice || invoiceRefFor(c, d.date); h.textContent = `Entra na fatura de ${ymLabel(ref)} · vencimento ${fmtDate(invoiceDue(c, ref))}`; } }
+      if (isCard(d) && d.date) { const c = S.cards.get(d.src.slice(5)); if (c) {
+        const n = Math.max(1, parseInt(d.parc) || 1), st = Math.min(n, Math.max(1, parseInt(d.startInst) || 1));
+        if (!editing && d.type === 'D' && n > 1) { const refS = d.firstRef || addMonths(invoiceRefFor(c, d.date), st - 1); const each = Math.round(parseNum(d.amount) / n * 100) / 100;
+          h.textContent = `Parcela ${st}/${n} na fatura de ${ymLabel(refS)} (venc. ${fmtDate(invoiceDue(c, refS))}) · última ${n}/${n} em ${ymLabel(addMonths(refS, n - st))}${each ? ` · ${n}x de ${fmt(each)}` : ''}${st > 1 ? ` · serão criadas ${n - st + 1} parcelas` : ''}`; }
+        else { const ref = d.invoice || invoiceRefFor(c, d.date); h.textContent = `Entra na fatura de ${ymLabel(ref)} · vencimento ${fmtDate(invoiceDue(c, ref))}`; } } }
       else if (h.textContent.startsWith('Entra')) h.textContent = '';
     },
     onDelete: editing ? async () => { closeModal(); await delTx(t0.id); } : null,
@@ -267,8 +273,9 @@ function txForm(t0 = {}, preset = {}) {
       const out = [];
       if (base.card && d.type === 'D' && +d.parc > 1) {
         const n = Math.min(48, Math.max(1, parseInt(d.parc))); const card = S.cards.get(base.card); const ref0 = invoiceRefFor(card, base.date); const g = uid();
-        const each = Math.floor(amount / n * 100) / 100;
-        for (let k = 0; k < n; k++) out.push(Object.assign({}, base, { amount: k === n - 1 ? r2(amount - each * (n - 1)) : each, date: k ? addMonthsDate(base.date, k) : base.date, invoice: addMonths(ref0, k), desc: `${base.desc} (${k + 1}/${n})`, group: g, inst: [k + 1, n], total: amount }));
+        const st = Math.min(n, Math.max(1, parseInt(d.startInst) || 1)); const refS = d.firstRef || addMonths(ref0, st - 1);
+        const each = Math.round(amount / n * 100) / 100;
+        for (let k = st - 1; k < n; k++) out.push(Object.assign({}, base, { amount: k === n - 1 ? r2(amount - each * (n - 1)) : each, date: k ? addMonthsDate(base.date, k) : base.date, invoice: addMonths(refS, k - (st - 1)), desc: `${base.desc} (${k + 1}/${n})`, group: g, inst: [k + 1, n], total: amount }));
       } else if (!base.card && +d.rep > 1) {
         const n = Math.min(60, parseInt(d.rep)); const g = uid();
         for (let k = 0; k < n; k++) out.push(Object.assign({}, base, { date: addMonthsDate(base.date, k), due: addMonthsDate(base.due || base.date, k), status: k === 0 ? base.status : 'pendente', paidDate: k === 0 ? base.paidDate : '', group: g, recur: true }));
