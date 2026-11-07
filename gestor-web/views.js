@@ -53,7 +53,7 @@ const chip = (t, c = '') => `<span class="chip ${c}">${t}</span>`;
 const bar = (p, c) => `<div class="bar"><i class="${c || (p >= 1 ? 'neg' : p >= .8 ? 'warn' : 'pos')}" style="width:${Math.min(100, Math.max(0, p * 100)).toFixed(1)}%"></i></div>`;
 const statusChip = t => t.status === 'pago' ? chip(t.type === 'R' ? 'Recebido' : 'Pago', 'pos') : (t.due || t.date) < todayStr() ? chip('Vencido', 'neg') : chip('Pendente', 'warn');
 const empty = (msg, btn = '') => `<div class="empty">${msg}${btn ? `<div style="margin-top:12px">${btn}</div>` : ''}</div>`;
-const optsHTML = (opts, cur) => opts.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(cur ?? '') ? 'selected' : ''}>${esc(l)}</option>`).join('');
+const optsHTML = (opts, cur) => normOpts(opts).map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(cur ?? '') ? 'selected' : ''}>${esc(l)}</option>`).join('');
 const normOpts = a => (a || []).map(x => Array.isArray(x) ? x : [x, x]);
 const avatar = (name, i = 0) => `<div class="av" style="background:${PALETTE[i % PALETTE.length]}">${esc((name || '?').slice(0, 2).toUpperCase())}</div>`;
 const roCheck = () => { if (!Store.canWrite) { toast('Você está em modo somente leitura.'); return false; } return true; };
@@ -143,7 +143,7 @@ function renderSide() {
 }
 function renderTop() {
   $('#title').textContent = TITLES[P.view] || '';
-  $('#mLbl').textContent = ymLong(P.ym);
+  $('#mLbl').textContent = window.innerWidth < 820 ? ymLabel(P.ym) : ymLong(P.ym);
   const ents = cfg().entities;
   $('#entSel').innerHTML = `<option value="*">Consolidado · todas as entidades</option>` + ents.map(e => `<option ${P.ent === e ? 'selected' : ''}>${esc(e)}</option>`).join('');
   if (P.ent !== '*' && !ents.includes(P.ent)) P.ent = '*';
@@ -207,7 +207,9 @@ function txForm(t0 = {}, preset = {}) {
   if (!accounts().length && !cards().length) { toast('Cadastre primeiro uma conta bancária ou cartão.'); accForm(); return; }
   const editing = !!t0.id;
   const d0 = editing ? Object.assign({}, t0) : Object.assign({ type: 'D', date: todayStr(), status: 'pago', parc: '1', rep: '1' }, preset);
-  d0.src = d0.src || (d0.card ? 'card:' + d0.card : d0.account ? 'acc:' + d0.account : (srcOptions(d0)[1] || [''])[0]);
+  let last = ''; try { last = localStorage.getItem('gfp_src_' + d0.type) || ''; } catch (e) { }
+  if (!srcOptions(d0).some(o => o[0] === last)) last = '';
+  d0.src = d0.src || (d0.card ? 'card:' + d0.card : d0.account ? 'acc:' + d0.account : last || (scopeAccounts()[0] ? 'acc:' + scopeAccounts()[0].id : (srcOptions(d0)[1] || [''])[0]));
   d0.amount = d0.amount ? String(d0.amount).replace('.', ',') : '';
   const isCard = d => (d.src || '').startsWith('card:');
   const descs = [...new Set(txs().map(t => t.desc).filter(Boolean))].slice(-300);
@@ -247,6 +249,7 @@ function txForm(t0 = {}, preset = {}) {
     onDelete: editing ? async () => { closeModal(); await delTx(t0.id); } : null,
     async onSave(d) {
       const amount = r2(parseNum(d.amount)); if (!(amount > 0)) throw new Error('Informe um valor maior que zero.');
+      if (d.type !== 'T') try { localStorage.setItem('gfp_src_' + d.type, d.src); } catch (e) { }
       const base = { type: d.type, desc: d.desc.trim(), amount, date: d.date, cc: d.cc || '', party: d.party || '', notes: d.notes || '' };
       if (d.type === 'T') {
         if (d.account === d.toAccount) throw new Error('Origem e destino devem ser diferentes.');
@@ -1104,6 +1107,7 @@ async function loadDemo() {
   $('#quickAdd').onclick = () => txForm();
   $('#menuBtn').onclick = () => $('#side').classList.toggle('open');
   $('#side').addEventListener('click', e => { if (e.target.closest('.nav')) $('#side').classList.remove('open'); });
+  $('#main').addEventListener('click', e => { if ($('#side').classList.contains('open')) { e.stopPropagation(); e.preventDefault(); $('#side').classList.remove('open'); } }, true);
   $('#modal').addEventListener('mousedown', e => { if (e.target.id === 'modal') closeModal(); });
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') closeModal();
