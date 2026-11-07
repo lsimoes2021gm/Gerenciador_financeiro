@@ -210,6 +210,7 @@ function txForm(t0 = {}, preset = {}) {
   let last = ''; try { last = localStorage.getItem('gfp_src_' + d0.type) || ''; } catch (e) { }
   if (!srcOptions(d0).some(o => o[0] === last)) last = '';
   d0.src = d0.src || (d0.card ? 'card:' + d0.card : d0.account ? 'acc:' + d0.account : last || (scopeAccounts()[0] ? 'acc:' + scopeAccounts()[0].id : (srcOptions(d0)[1] || [''])[0]));
+  const remembered = !t0.id && !preset.src && last && d0.src === last;
   d0.amount = d0.amount ? String(d0.amount).replace('.', ',') : '';
   const isCard = d => (d.src || '').startsWith('card:');
   const descs = [...new Set(txs().map(t => t.desc).filter(Boolean))].slice(-300);
@@ -222,7 +223,7 @@ function txForm(t0 = {}, preset = {}) {
       { k: 'desc', label: 'Descrição', w: 4, req: true, list: descs, ph: 'Ex.: Supermercado Pão de Açúcar' },
       { k: 'amount', label: 'Valor (R$)', type: 'money', w: 2, req: true, ph: '0,00' },
       { k: 'date', label: 'Data / competência', type: 'date', w: 2, req: true },
-      { k: 'src', label: 'Conta ou cartão', type: 'select', w: 4, req: true, options: srcOptions, when: d => d.type !== 'T' },
+      { k: 'src', label: 'Conta ou cartão', type: 'select', w: 4, req: true, options: srcOptions, when: d => d.type !== 'T', hint: remembered ? '<span style="color:var(--warn)">⚠ Pré-selecionado pelo último lançamento — confira</span>' : '' },
       { k: 'account', label: 'Conta de origem', type: 'select', w: 3, options: () => [['', 'Selecione…'], ...accounts().map(a => [a.id, a.name])], when: d => d.type === 'T', req: true },
       { k: 'toAccount', label: 'Conta de destino', type: 'select', w: 3, options: () => [['', 'Selecione…'], ...accounts().map(a => [a.id, a.name])], when: d => d.type === 'T', req: true },
       { k: 'status', label: 'Situação', type: 'select', w: 2, options: d => [['pago', d.type === 'R' ? 'Recebido' : 'Pago / efetivado'], ['pendente', d.type === 'R' ? 'A receber' : 'A pagar']], when: d => !isCard(d) },
@@ -283,8 +284,11 @@ function txForm(t0 = {}, preset = {}) {
         if (base.card) base.invoice = invoiceRefFor(S.cards.get(base.card), base.date);
         out.push(base);
       }
+      const f = out[0]; const dup = txs().find(t => t.type === f.type && Math.abs(+t.amount - f.amount) < 0.005 && t.date === f.date && (t.desc || '').toLowerCase() === (f.desc || '').toLowerCase() && (t.card || '') === (f.card || '') && (t.account || '') === (f.account || ''));
+      if (dup && !(await confirmBox('Possível lançamento duplicado', `Já existe "${esc(dup.desc)}" de ${fmt(dup.amount)} em ${fmtDate(dup.date)} ${dup.card ? 'no cartão ' + esc(cardName(dup.card)) : 'na conta ' + esc(accName(dup.account))}. Lançar mesmo assim?`, 'Lançar mesmo assim'))) return;
       await Store.putMany('tx', out);
-      toast(out.length > 1 ? `${out.length} lançamentos criados` : 'Lançamento registrado');
+      const where = f.card ? `💳 ${cardName(f.card)} · fatura ${ymLabel(f.invoice)}` : f.type === 'T' ? `${accName(f.account)} → ${accName(f.toAccount)}` : `🏦 ${accName(f.account)}`;
+      toast(`${out.length > 1 ? out.length + ' lançamentos criados' : 'Lançado'} em ${where}`);
     },
   });
   const aiBtn = $('#aiCat');
@@ -438,7 +442,7 @@ VIEWS.lancamentos = {
 };
 function txTable() {
   const q = LF.q.toLowerCase();
-  let list = txs().filter(t => txInScope(t) && (LF.all || ymOf(t.date) === P.ym || (t.status === 'pago' && ymOf(t.paidDate) === P.ym && !t.card)));
+  let list = txs().filter(t => txInScope(t) && (LF.all || (t.card ? (t.invoice || ymOf(t.date)) === P.ym : (ymOf(t.date) === P.ym || (t.status === 'pago' && ymOf(t.paidDate) === P.ym)))));
   if (LF.type) list = list.filter(t => t.type === LF.type);
   if (LF.status) list = list.filter(t => t.card ? LF.status === 'pago' : t.status === LF.status);
   if (LF.src) { const [k, id] = LF.src.split(':'); list = list.filter(t => k === 'card' ? t.card === id : (t.account === id || t.toAccount === id) && !t.card); }
