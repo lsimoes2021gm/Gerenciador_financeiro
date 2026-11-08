@@ -476,11 +476,32 @@ function payView(type) {
   }).join('') : '';
   const rest = items.filter(p => p.due > addDays(td, 7));
   return `<div class="grid g4">${kpi(type === 'R' ? 'Atrasados' : 'Vencidas', fmt(sum(over, p => p.amount)), `${over.length} título(s)`, over.length ? 'neg' : '')}${kpi('Próximos 7 dias', fmt(sum(wk, p => p.amount)), `${wk.length} título(s)`)}${kpi('Próximos 30 dias', fmt(sum(m30, p => p.amount)), `${m30.length} título(s)`)}${kpi(`Total em ${UI.payH} dias`, fmt(sum(items, p => p.amount)), `${items.length} título(s)`, type === 'R' ? 'pos' : '')}</div>
-  <div class="toolbar" style="margin-top:16px"><select class="ctl" onchange="UI.payH=+this.value;render()">${optsHTML([[30, 'Horizonte: 30 dias'], [60, '60 dias'], [90, '90 dias'], [180, '180 dias'], [365, '12 meses']], UI.payH)}</select><div class="sp"></div><button class="btn pri" data-act="newTx" data-type="${type}" data-status="pendente">+ Nova conta a ${type === 'R' ? 'receber' : 'pagar'}</button></div>
+  <div style="height:16px"></div>
   <div class="card"><div class="bd p0">${items.length ? `<div class="tw"><table class="t"><thead><tr><th>Vencimento</th><th>Descrição</th><th>Categoria</th><th>Conta</th><th>Prazo</th><th class="n">Valor</th><th></th></tr></thead><tbody>${sec(type === 'R' ? 'Em atraso' : 'Vencidas', over)}${sec('Próximos 7 dias', wk)}${sec('Demais', rest)}</tbody></table></div>` : empty(`Nenhuma conta a ${type === 'R' ? 'receber' : 'pagar'} no período.`)}</div></div>`;
 }
-VIEWS.pagar = { html: () => payView('D') };
-VIEWS.receber = { html: () => payView('R') };
+function payMonthView(type) {
+  const td = todayStr(); const ym = P.ym; const R = type === 'R';
+  const items = txs().filter(t => !t.card && t.type === type && t.kind !== 'fatura' && !SYS_CATS.includes(t.cat) && txInScope(t) && ymOf(t.due || t.date) === ym)
+    .map(t => ({ t, due: t.due || t.date, amount: +t.amount, desc: t.desc, paid: t.status === 'pago', paidDate: t.paidDate }));
+  if (!R) scopeCards().forEach(c => { const e = cardInvoices(c.id)[ym]; if (e && e.total > 0.004) items.push({ virtual: true, card: c, inv: e, due: e.due, amount: e.total, desc: `Fatura ${c.name} · ${ymLabel(ym)}`, paid: e.open <= 0.004, partial: e.paid > 0 && e.open > 0.004, paidDate: (e.payments[e.payments.length - 1] || {}).paidDate }); });
+  items.sort((a, b) => a.due.localeCompare(b.due));
+  const openAmt = p => p.virtual ? p.inv.open : (p.paid ? 0 : p.amount);
+  const tot = sum(items, p => p.amount), open = sum(items, openAmt), over = sum(items.filter(p => p.due < td), openAmt);
+  const st = p => p.paid ? chip(`${R ? 'Recebido' : 'Pago'}${p.paidDate ? ' ' + fmtDate(p.paidDate).slice(0, 5) : ''}`, 'pos') : p.partial ? chip(`Parcial · falta ${fmt(p.inv.open)}`, 'warn') : p.due < td ? chip('Vencido', 'neg') : p.virtual && p.inv.status === 'aberta' ? chip('Fatura aberta', 'acc') : chip(R ? 'A receber' : 'A pagar', 'warn');
+  return `<div class="grid g4">${kpi(`Total de ${ymLong(ym)}`, fmt(tot), `${items.length} título(s)`)}${kpi(R ? 'Recebido' : 'Pago', fmt(tot - open), '', 'pos')}${kpi('Em aberto', fmt(open), '', open ? 'warn' : '')}${kpi(R ? 'Atrasado' : 'Vencido', fmt(over), '', over ? 'neg' : '')}</div>
+  <div class="card" style="margin-top:16px"><div class="bd p0">${items.length ? `<div class="tw"><table class="t"><thead><tr><th>Vencimento</th><th>Descrição</th><th>Categoria</th><th>Conta</th><th>Situação</th><th class="n">Valor</th><th></th></tr></thead><tbody>${items.map(p => `<tr><td class="num">${fmtDate(p.due)}</td><td>${esc(p.desc)}${p.virtual ? '' : `<div class="hint">${esc(p.t.party || '')}</div>`}</td><td>${p.virtual ? chip('Cartão', 'info') : esc(p.t.cat || '')}</td><td>${p.virtual ? esc(p.card.name) : esc(accName(p.t.account))}</td><td>${st(p)}</td><td class="n"><b>${fmt(p.amount)}</b></td>
+    <td class="act">${p.virtual ? (p.inv.open > 0.004 ? `<button class="btn sm pri" data-act="payInv" data-card="${p.card.id}" data-ref="${p.inv.ref}">Pagar fatura</button>` : '') : (p.paid ? '' : `<button class="btn sm pri" data-act="payTx" data-id="${p.t.id}">${R ? 'Receber' : 'Pagar'}</button>`) + `<button class="btn sm ghost" data-act="editTx" data-id="${p.t.id}">Editar</button>`}</td></tr>`).join('')}<tr class="tot"><td colspan="5">Total do mês</td><td class="n">${fmt(tot)}</td><td></td></tr></tbody></table></div>` : empty(`Nenhuma conta a ${R ? 'receber' : 'pagar'} com vencimento em ${ymLong(ym)}.`)}</div></div>`;
+}
+function payPage(type) {
+  const cur = ymOf(todayStr()); const mode = UI.payMode || (P.ym === cur ? 'aberto' : 'mes');
+  const R = type === 'R';
+  const head = `<div class="toolbar"><div class="seg" style="width:auto">${[['aberto', 'Em aberto (a partir de hoje)'], ['mes', `Por mês · ${ymLong(P.ym)}`]].map(([k, l]) => `<button class="${mode === k ? 'on T' : ''}" style="padding:7px 14px;white-space:nowrap" onclick="UI.payMode='${k}';render()">${l}</button>`).join('')}</div>
+    ${mode === 'aberto' ? `<select class="ctl" onchange="UI.payH=+this.value;render()">${optsHTML([[30, 'Horizonte: 30 dias'], [60, '60 dias'], [90, '90 dias'], [180, '180 dias'], [365, '12 meses']], UI.payH)}</select>` : '<span class="hint">Use ‹ › no topo para trocar o mês</span>'}
+    <div class="sp"></div><button class="btn pri" data-act="newTx" data-type="${type}" data-status="pendente">+ Nova conta a ${R ? 'receber' : 'pagar'}</button></div>`;
+  return head + (mode === 'mes' ? payMonthView(type) : payView(type));
+}
+VIEWS.pagar = { html: () => payPage('D') };
+VIEWS.receber = { html: () => payPage('R') };
 
 // ---------- CARTÕES ----------
 VIEWS.cartoes = {
@@ -1111,8 +1132,8 @@ async function loadDemo() {
 // =========================================================
 (function boot() {
   try { const th = localStorage.getItem('gfp_theme'); if (th) document.documentElement.dataset.theme = th; } catch (e) { }
-  $('#mPrev').onclick = () => { P.ym = addMonths(P.ym, -1); render(); };
-  $('#mNext').onclick = () => { P.ym = addMonths(P.ym, 1); render(); };
+  $('#mPrev').onclick = () => { P.ym = addMonths(P.ym, -1); UI.payMode = null; render(); };
+  $('#mNext').onclick = () => { P.ym = addMonths(P.ym, 1); UI.payMode = null; render(); };
   $('#entSel').onchange = e => { P.ent = e.target.value; try { localStorage.setItem('gfp_ent', P.ent); } catch (x) { } render(); };
   $('#themeBtn').onclick = () => { const d = document.documentElement; d.dataset.theme = d.dataset.theme === 'dark' ? '' : 'dark'; try { localStorage.setItem('gfp_theme', d.dataset.theme); } catch (e) { } render(); };
   $('#quickAdd').onclick = () => txForm();
