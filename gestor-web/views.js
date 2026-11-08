@@ -1124,6 +1124,7 @@ async function loadDemo() {
     if (e.key === 'Escape') closeModal();
     if (e.key === 'n' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName) && !$('#modal').classList.contains('on')) { e.preventDefault(); txForm(); }
   });
+  document.addEventListener('click', e => { const el = e.target; if (el && el.matches && el.matches('input[type=date],input[type=month]') && typeof el.showPicker === 'function') { try { el.showPicker(); } catch (x) { } } });
   window.addEventListener('hashchange', render);
   Store.on(render);
   Store.init().then(async () => {

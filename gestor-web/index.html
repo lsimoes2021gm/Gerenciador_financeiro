@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
 :root{
+  color-scheme:light;
   --bg:#f3f5f9; --panel:#ffffff; --panel2:#f8fafc; --line:#e4e8ef; --line2:#eef1f6;
   --text:#0f172a; --muted:#64748b; --faint:#94a3b8;
   --side:#0b1220; --side2:#111a2e; --sidetext:#cbd5e1; --sidemuted:#64748b;
@@ -45,6 +46,7 @@ a{color:var(--acc)}
 #top h1{font-size:16px;margin:0;font-weight:600;margin-right:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #view{overflow-y:auto;padding:22px;flex:1}
 .ctl{height:34px;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:0 10px;outline:none}
+input[type=date].ctl,input[type=month].ctl{cursor:pointer}[data-theme=dark] input::-webkit-calendar-picker-indicator{filter:invert(1)}input[type=date]::-webkit-calendar-picker-indicator,input[type=month]::-webkit-calendar-picker-indicator{cursor:pointer;opacity:.75}
 .ctl:focus{border-color:var(--acc);box-shadow:0 0 0 3px var(--acc2)}
 .mnav{display:flex;align-items:center;border:1px solid var(--line);border-radius:8px;background:var(--panel);height:34px}
 .mnav button{border:0;background:none;width:30px;height:32px;cursor:pointer;color:var(--muted)}.mnav span{min-width:64px;white-space:nowrap;text-align:center;font-weight:500}
