@@ -501,7 +501,7 @@ function payPage(type) {
   const R = type === 'R';
   const head = `<div class="toolbar"><div class="seg" style="width:auto">${[['aberto', 'Em aberto (a partir de hoje)'], ['mes', `Por mês · ${ymLong(P.ym)}`]].map(([k, l]) => `<button class="${mode === k ? 'on T' : ''}" style="padding:7px 14px;white-space:nowrap" onclick="UI.payMode='${k}';render()">${l}</button>`).join('')}</div>
     ${mode === 'aberto' ? `<select class="ctl" onchange="UI.payH=+this.value;render()">${optsHTML([[30, 'Horizonte: 30 dias'], [60, '60 dias'], [90, '90 dias'], [180, '180 dias'], [365, '12 meses']], UI.payH)}</select>` : '<span class="hint">Use ‹ › no topo para trocar o mês</span>'}
-    <div class="sp"></div><button class="btn pri" data-act="newTx" data-type="${type}" data-status="pendente">+ Nova conta a ${R ? 'receber' : 'pagar'}</button></div>`;
+    <div class="sp"></div>${!R && MCP ? '<button class="btn" onclick="gmailScan()">📧 Ler faturas do Gmail</button>' : ''}<button class="btn pri" data-act="newTx" data-type="${type}" data-status="pendente">+ Nova conta a ${R ? 'receber' : 'pagar'}</button></div>`;
   return head + (mode === 'mes' ? payMonthView(type) : payView(type));
 }
 VIEWS.pagar = { html: () => payPage('D') };
@@ -517,7 +517,7 @@ VIEWS.cartoes = {
     const ref = UI.ref || curRef; const inv = invs[ref] || { total: 0, paid: 0, open: 0, items: [], payments: [], due: invoiceDue(c, ref), close: invoiceClose(c, ref), status: 'zerada' };
     const refs = []; for (let i = -6; i <= 6; i++) refs.push(addMonths(curRef, i));
     const stc = { aberta: 'acc', fechada: 'warn', vencida: 'neg', paga: 'pos', zerada: '' };
-    return `<div class="toolbar"><div class="sp"></div><button class="btn" data-act="import">Importar fatura CSV</button><button class="btn pri" data-act="newCard">+ Cartão</button></div>
+    return `<div class="toolbar"><div class="sp"></div>${MCP ? '<button class="btn" onclick="gmailScan()">📧 Ler faturas do Gmail</button>' : ''}<button class="btn" data-act="import">Importar fatura CSV</button><button class="btn pri" data-act="newCard">+ Cartão</button></div>
     <div class="grid g4">${cs.map(k => { const u = cardUsed(k.id); return `<div class="ccard" data-act="selCard" data-id="${k.id}" style="cursor:pointer;background:linear-gradient(135deg,${k.color || '#334155'},#0b1220);${k.id === c.id ? 'outline:3px solid var(--acc);outline-offset:2px' : ''}"><div style="display:flex;justify-content:space-between"><span class="nm">${esc(k.name)}</span><span style="opacity:.8;font-size:12px">${esc(k.brand || '')}</span></div><div><div style="opacity:.75;font-size:11.5px">Disponível</div><div class="lim">${fmt((+k.limit || 0) - u)}</div><div style="opacity:.75;font-size:11.5px;margin-top:4px">Usado ${fmt(u)} de ${fmt(k.limit)} · fecha dia ${k.closeDay}, vence dia ${k.dueDay}</div></div></div>`; }).join('')}</div>
     <div class="grid g3" style="margin-top:16px">
       <div class="card s2"><div class="hd"><h3>Fatura ${esc(c.name)}</h3><select class="ctl" onchange="UI.ref=this.value;render()">${optsHTML(refs.map(r => [r, `${ymLong(r)}${r === curRef ? ' (atual)' : ''}`]), ref)}</select><button class="btn sm ghost" data-act="editCard" data-id="${c.id}">Editar cartão</button></div>
@@ -924,7 +924,7 @@ VIEWS.integracoes = {
       ${integ('F', '#7248b9', 'Google Forms', st('file', 'via CSV'), 'Crie um formulário (Data, Descrição, Valor) para lançar gastos pelo celular; exporte as respostas do Planilhas em CSV e importe aqui com categorização automática.', `<button class="btn sm" data-act="import">Importar respostas</button>`)}
       ${integ('W', '#25d366', 'WhatsApp', st('file', 'compartilhamento'), 'Envie o resumo financeiro do mês para você ou para a família. A API oficial (WhatsApp Business) para alertas automáticos exige um servidor intermediário — prevista na fase 2.', `<a class="btn sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(waSummary())}">Enviar resumo</a>`)}
       ${integ('B', '#ec7000', 'Bancos / Open Finance', st('file', 'OFX / CSV'), 'Importe extratos OFX ou CSV de qualquer banco, com detecção de duplicados e categorização pelo histórico. A sincronização automática via Open Finance Brasil exige um agregador certificado (ex.: Pluggy, Belvo) e servidor próprio — fase 2.', `<button class="btn sm" data-act="import">Importar extrato</button>`)}
-      ${integ('G', '#ea4335', 'Gmail', st(false, 'conectar'), 'Leitura automática de faturas, boletos e comprovantes recebidos por e-mail. Conecte o Gmail nas configurações de conectores do Claude para ativar.', '')}
+      ${integ('G', '#ea4335', 'Gmail', MCP ? st(true, 'disponível') : st(false, 'indisponível'), 'Lê e-mails de faturas, boletos e pagamentos de cartão. A IA extrai valor, vencimento e cartão; você revisa e aprova antes de qualquer lançamento.', MCP ? `<button class="btn sm pri" onclick="gmailScan()">📧 Ler faturas do Gmail</button>` : '')}
     </div></div></div>`;
   },
 };
@@ -965,6 +965,135 @@ async function driveCall(input, okMsg) {
 }
 const driveBackup = () => driveCall({ title: `Backup Gestor Financeiro ${todayStr()}.json`, textContent: backupJSON(), contentMimeType: 'application/json', disableConversionToGoogleType: true }, 'Backup salvo no Drive');
 const driveSheet = () => { const rows = txCSV().split('\n').map(l => l.split(';')); driveCall({ title: `Lançamentos ${todayStr()}`, textContent: rows.map(r => r.map(v => /[,"]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v).join(',')).join('\n'), contentMimeType: 'text/csv' }, 'Planilha criada no Drive'); };
+
+
+// =========================================================
+// GMAIL — leitura de faturas, boletos e pagamentos
+// =========================================================
+const GM = { items: [], days: 45 };
+const gmErrMsg = e => ({ needs_reauth: 'Reconecte o Gmail em claude.ai → Configurações → Conectores.', server_not_connected: 'Conecte o Gmail em claude.ai → Configurações → Conectores.', not_in_manifest: 'O acesso ao Gmail não foi autorizado para esta página. Clique de novo e permita.', approval_required: 'O Claude precisa da sua aprovação para ler o Gmail. Clique de novo e aprove.', blocked_by_policy: 'Sua organização bloqueou o acesso ao Gmail.', server_unavailable: 'Gmail indisponível no momento. Tente em instantes.' }[e && e.code] || ('Erro ao acessar o Gmail: ' + ((e && (e.message || e.code)) || e)));
+const gmClean = t => String(t || '').replace(/<https?:[^>]*>/g, ' ').replace(/\[https?:[^\]]*\]/g, ' ').replace(/https?:\/\/\S+/g, ' ').replace(/00020126\S+/g, '[pix]').replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim().slice(0, 2200);
+const MESNUM = { janeiro: 1, fevereiro: 2, 'março': 3, marco: 3, abril: 4, maio: 5, junho: 6, julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12 };
+function gmGuessCard(text) {
+  const t = text.toLowerCase(); const keys = [['mercado pago', 'mercado'], ['carrefour', 'carrefour'], ['inter', 'inter'], ['ourocard', 'bb'], ['banco do brasil', 'bb'], ['santander', 'santander'], ['pan', 'pan'], ["sam's", 'sams'], ['sams', 'sams'], ['amazon', 'amazon'], ['bradesco', 'amazon'], ['nubank', 'nubank'], ['itaú', 'itaú'], ['itau', 'itaú'], ['c6', 'c6']];
+  for (const [k, n] of keys) if (t.includes(k)) { const c = cards().find(c => c.name.toLowerCase().includes(n)); if (c) return c.id; }
+  return '';
+}
+function gmRegex(m) {
+  const txt = (m.subject || '') + '\n' + m.body; const low = txt.toLowerCase();
+  const val = (txt.match(/(?:valor|total a pagar|você pagou|valor da fatura|total da fatura)[^\dR]{0,25}R\$\s*([\d.]+,\d{2})/i) || txt.match(/R\$\s*([\d.]+,\d{2})/) || [])[1];
+  let venc = (txt.match(/venc\w*[^\d]{0,25}(\d{2})\/(\d{2})\/(\d{4})/i) || []);
+  venc = venc[3] ? `${venc[3]}-${venc[2]}-${venc[1]}` : '';
+  if (!venc) { const mm = low.match(/venc\w*[^\d]{0,30}(\d{1,2})\s*(?:de\s*|\/)\s*(janeiro|fevereiro|março|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)/); if (mm) { const y = (m.date || todayStr()).slice(0, 4); venc = `${y}-${pad(MESNUM[mm[2]])}-${pad(mm[1])}`; } }
+  const tipo = /você pagou|pagamento (recebido|confirmado)|pagou a fatura/.test(low) ? 'pagamento_fatura' : /fatura|cartão|cartao/.test(low) ? 'fatura_cartao' : /boleto|conta|vencimento/.test(low) ? 'conta_a_pagar' : 'ignorar';
+  return { id: m.id, tipo, valor: val ? parseNum(val) : 0, vencimento: venc, data: (m.date || '').slice(0, 10), cartao_id: gmGuessCard(txt), emissor: (m.subject || '').replace(/^(ENC|FW|FWD|RES):\s*/i, '').slice(0, 60), categoria: '' };
+}
+async function gmailScan() {
+  if (!MCP) { toast('Gmail disponível apenas na versão do app dentro do Claude.'); return; }
+  if (!roCheck()) return;
+  modal(`<div class="mdl wide"><div class="mh"><h2>📧 Faturas e contas no Gmail</h2><button class="btn ghost ib" onclick="closeModal()">✕</button></div><div class="mb" id="gmBody"><div class="empty"><div class="spin"></div><span id="gmStep">Procurando e-mails de faturas, boletos e pagamentos…</span></div></div><div class="mf" id="gmFoot"><button class="btn" onclick="closeModal()">Fechar</button></div></div>`);
+  const step = t => { const e = $('#gmStep'); if (e) e.textContent = t; };
+  const done = new Set((S.config.get('gmail') || {}).done || []);
+  const q = `newer_than:${GM.days}d (fatura OR boleto OR vencimento OR "você pagou" OR "pagamento recebido" OR "compra aprovada") -category:promotions -category:social`;
+  let threads;
+  try { const r = await MCP.callTool('Gmail', 'search_threads', { query: q, pageSize: 40, view: 'THREAD_VIEW_MINIMAL' }); threads = ((r.payload || {}).threads) || []; }
+  catch (e) { $('#gmBody').innerHTML = `<div class="empty">${esc(gmErrMsg(e))}</div>`; return; }
+  const all = threads.flatMap(t => (t.messages || []).map(m => ({ id: m.id, subject: m.subject || '', date: m.date || '', snippet: m.snippet || '' })));
+  const fresh = all.filter(m => !done.has(m.id)).slice(0, 20);
+  if (!fresh.length) { $('#gmBody').innerHTML = `<div class="empty">Nenhum e-mail novo de fatura nos últimos ${GM.days} dias. ${all.length ? `(${all.length} já processado(s) anteriormente)` : ''}</div>`; return; }
+  for (let i = 0; i < fresh.length; i++) {
+    step(`Lendo e-mail ${i + 1} de ${fresh.length}…`);
+    try { const r = await MCP.callTool('Gmail', 'get_message', { messageId: fresh[i].id, messageFormat: 'PLAIN_TEXT' }); fresh[i].body = gmClean((r.payload || {}).plaintextBody || fresh[i].snippet); }
+    catch (e) { fresh[i].body = gmClean(fresh[i].snippet); if (['needs_reauth', 'server_not_connected', 'not_in_manifest', 'approval_required'].includes(e.code)) { $('#gmBody').innerHTML = `<div class="empty">${esc(gmErrMsg(e))}</div>`; return; } }
+  }
+  let items = null;
+  if (AI) {
+    step('A IA está interpretando os e-mails…');
+    const cardList = cards().map(c => ({ id: c.id, nome: c.name, bandeira: c.brand }));
+    const cats = catsOf('D').map(c => c.name);
+    const prompt = `Você extrai dados financeiros de e-mails de bancos brasileiros. Hoje é ${todayStr()}.
+Para CADA e-mail abaixo, retorne um objeto com:
+- id: o id do e-mail
+- tipo: "fatura_cartao" (fatura de cartão fechada/disponível/vencendo/vencida com valor), "pagamento_fatura" (confirma que a fatura foi paga), "conta_a_pagar" (boleto ou conta que não é cartão), "compra_cartao" (aviso de compra individual no cartão) ou "ignorar" (marketing, pontos, recibo sem valor relevante, aviso sem valor)
+- emissor: nome curto do banco/empresa (ex.: "Cartão Carrefour", "Mercado Pago")
+- valor: número em reais (ex.: 159.14) ou 0 se não houver
+- vencimento: "AAAA-MM-DD" ou "" (para "venceu dia 4/novembro" use o ano do e-mail)
+- data: data do e-mail ou da transação "AAAA-MM-DD"
+- cartao_id: o id do cartão da lista que corresponde ao banco/bandeira, ou "" se nenhum corresponder com segurança
+- categoria: para conta_a_pagar/compra_cartao, uma destas: ${JSON.stringify(cats)}; senão ""
+- descricao: texto curto para o lançamento
+Cartões cadastrados: ${JSON.stringify(cardList)}
+E-mails encaminhados ("ENC:") devem ser analisados pelo conteúdo original. Responda SOMENTE um array JSON.
+E-MAILS:
+${JSON.stringify(fresh.map(m => ({ id: m.id, assunto: m.subject, data: m.date.slice(0, 10), texto: m.body })))}`;
+    try { const r = await AI.json(prompt, { modelTier: 'default' }); if (Array.isArray(r)) items = r; } catch (e) { console.warn('AI', e); }
+  }
+  if (!items) items = fresh.map(gmRegex);
+  const byId = Object.fromEntries(fresh.map(m => [m.id, m]));
+  GM.items = items.filter(it => byId[it.id]).map(it => Object.assign({ sel: it.tipo !== 'ignorar' && +it.valor > 0, subject: byId[it.id].subject, cartao_id: '', vencimento: '', categoria: '' }, it, { cartao_id: cards().some(c => c.id === it.cartao_id) ? it.cartao_id : gmGuessCard(byId[it.id].subject + ' ' + byId[it.id].body) }));
+  gmRender();
+}
+function gmAction(it) {
+  const v = +it.valor || 0; const c = S.cards.get(it.cartao_id);
+  if (it.tipo === 'fatura_cartao') {
+    if (!c) return `Lançar como conta a pagar de ${fmt(v)}${it.vencimento ? ' venc. ' + fmtDate(it.vencimento) : ''}`;
+    const ref = it.vencimento ? ymOf(it.vencimento) : currentInvoiceRef(c); const inv = cardInvoices(c.id)[ref] || { total: 0 };
+    const d = r2(v - inv.total);
+    return Math.abs(d) < 0.01 ? `✓ Confere com a fatura ${ymLabel(ref)} do app (${fmt(inv.total)})` : `Fatura ${ymLabel(ref)} no app: ${fmt(inv.total)} → ajustar ${d > 0 ? '+' : ''}${fmt(d)}`;
+  }
+  if (it.tipo === 'pagamento_fatura') return c ? `Registrar pagamento de ${fmt(v)} no ${c.name}` : 'Escolha o cartão';
+  if (it.tipo === 'conta_a_pagar') return `Conta a pagar ${fmt(v)}${it.vencimento ? ' venc. ' + fmtDate(it.vencimento) : ''}`;
+  if (it.tipo === 'compra_cartao') return c ? `Compra no ${c.name}` : 'Escolha o cartão';
+  return 'Ignorar';
+}
+function gmRender() {
+  const T = [['fatura_cartao', 'Fatura de cartão'], ['pagamento_fatura', 'Pagamento de fatura'], ['conta_a_pagar', 'Conta / boleto'], ['compra_cartao', 'Compra no cartão'], ['ignorar', 'Ignorar']];
+  const body = $('#gmBody'); if (!body) return;
+  body.innerHTML = `<div class="hint" style="margin-bottom:10px">${GM.items.length} e-mail(s) analisado(s)${AI ? ' pela IA' : ''}. Revise tipo, cartão, valor e vencimento antes de aplicar. Nada é lançado sem a sua confirmação.</div>
+  <div class="tw" style="max-height:440px;border:1px solid var(--line);border-radius:8px"><table class="t"><thead><tr><th></th><th>E-mail</th><th>Tipo</th><th>Cartão</th><th class="n">Valor</th><th>Vencimento</th><th>O que será feito</th></tr></thead><tbody>
+  ${GM.items.map((it, i) => `<tr><td><input type="checkbox" data-gi="${i}" data-k="sel" ${it.sel ? 'checked' : ''}></td>
+    <td style="max-width:230px"><div class="ell"><b>${esc(it.emissor || '')}</b></div><div class="hint ell">${esc(it.subject)}</div><div class="hint">${fmtDate(it.data)}</div></td>
+    <td><select class="ctl" style="height:28px" data-gi="${i}" data-k="tipo">${optsHTML(T, it.tipo)}</select></td>
+    <td><select class="ctl" style="height:28px;max-width:170px" data-gi="${i}" data-k="cartao_id">${optsHTML([['', '—'], ...cards().map(c => [c.id, c.name])], it.cartao_id)}</select></td>
+    <td class="n"><input class="ctl num" style="height:28px;width:96px;text-align:right" data-gi="${i}" data-k="valor" value="${String(it.valor || 0).replace('.', ',')}"></td>
+    <td><input class="ctl" type="date" style="height:28px" data-gi="${i}" data-k="vencimento" value="${esc(it.vencimento || '')}"></td>
+    <td class="hint" style="max-width:220px" id="gmA${i}">${esc(gmAction(it))}</td></tr>`).join('')}</tbody></table></div>`;
+  $$('#gmBody [data-gi]').forEach(el => el.onchange = () => { const it = GM.items[+el.dataset.gi]; const k = el.dataset.k; it[k] = k === 'sel' ? el.checked : k === 'valor' ? parseNum(el.value) : el.value; const a = $('#gmA' + el.dataset.gi); if (a) a.textContent = gmAction(it); });
+  $('#gmFoot').innerHTML = `<button class="btn" onclick="closeModal()">Fechar</button><button class="btn" onclick="gmMark(false)">Marcar selecionados como vistos</button><button class="btn pri" onclick="gmApply()">Aplicar selecionados</button>`;
+}
+async function gmMark(silent) {
+  const ids = GM.items.filter(it => it.sel || it.tipo === 'ignorar').map(it => it.id);
+  const cur = (S.config.get('gmail') || {}).done || [];
+  await Store.put('config', Object.assign({}, S.config.get('gmail') || {}, { id: 'gmail', done: [...new Set([...cur, ...ids])].slice(-1000) }));
+  if (!silent) { toast(`${ids.length} e-mail(s) marcados como vistos`); closeModal(); }
+}
+async function gmApply() {
+  if (!roCheck()) return;
+  const sel = GM.items.filter(it => it.sel && it.tipo !== 'ignorar' && +it.valor > 0); const out = []; let n = 0;
+  for (const it of sel) {
+    const v = r2(+it.valor); const c = S.cards.get(it.cartao_id); const acc = (c && c.payAccount) || (scopeAccounts()[0] || accounts()[0] || {}).id; const tag = { fromGmail: it.id };
+    if (it.tipo === 'fatura_cartao' && c) {
+      const ref = it.vencimento ? ymOf(it.vencimento) : currentInvoiceRef(c); const inv = cardInvoices(c.id)[ref] || { total: 0 }; const d = r2(v - inv.total);
+      if (Math.abs(d) >= 0.01) out.push(Object.assign({ type: d > 0 ? 'D' : 'R', desc: `Ajuste fatura ${ymLabel(ref)} (Gmail)`, amount: Math.abs(d), card: c.id, account: '', invoice: ref, date: addDays(invoiceClose(c, ref), -1), status: 'pago', cat: d > 0 ? 'Outras despesas' : 'Reembolsos', sub: d > 0 ? 'Não identificado' : 'Estorno', notes: 'Diferença entre a fatura do e-mail e as compras lançadas' }, tag));
+    } else if (it.tipo === 'pagamento_fatura' && c) {
+      const invs = Object.values(cardInvoices(c.id)).filter(e => e.open > 0.004 && e.due <= addDays(it.data || todayStr(), 20)).sort((a, b) => b.due.localeCompare(a.due));
+      const ref = it.vencimento ? ymOf(it.vencimento) : (invs[0] || {}).ref || currentInvoiceRef(c);
+      if (!acc) { toast('Cadastre uma conta para registrar pagamentos.'); continue; }
+      out.push(Object.assign({ type: 'D', kind: 'fatura', payCard: c.id, invoice: ref, account: acc, amount: v, date: it.data || todayStr(), paidDate: it.data || todayStr(), due: invoiceDue(c, ref), status: 'pago', cat: 'Pagamento de fatura', desc: `Pagamento fatura ${c.name} ${ymLabel(ref)}` }, tag));
+    } else if (it.tipo === 'compra_cartao' && c) {
+      const d = it.data || todayStr();
+      out.push(Object.assign({ type: 'D', desc: it.descricao || it.emissor || 'Compra (Gmail)', amount: v, card: c.id, account: '', date: d, invoice: invoiceRefFor(c, d), status: 'pago', cat: catInfo(it.categoria) ? it.categoria : 'Outras despesas', sub: '' }, tag));
+    } else {
+      if (!acc) { toast('Cadastre uma conta para lançar contas a pagar.'); continue; }
+      const due = it.vencimento || it.data || todayStr();
+      out.push(Object.assign({ type: 'D', desc: it.descricao || ('Fatura ' + (it.emissor || '')), amount: v, account: acc, card: '', date: due, due, status: 'pendente', paidDate: '', cat: catInfo(it.categoria) ? it.categoria : 'Outras despesas', sub: '', party: it.emissor || '' }, tag));
+    }
+    n++;
+  }
+  if (out.length) await Store.putMany('tx', out);
+  await gmMark(true);
+  closeModal(); toast(`Gmail: ${n} e-mail(s) aplicados · ${out.length} lançamento(s) criados`);
+}
 
 // ---------- CONFIGURAÇÕES ----------
 VIEWS.config = {
