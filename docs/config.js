@@ -8,7 +8,7 @@
 // NUNCA coloque aqui a "service_role" / "secret key".
 // =====================================================================
 window.GFP_CONFIG = {
-  supabaseUrl: 'https://SEU-PROJETO.supabase.co',
-  supabaseKey: 'COLE_AQUI_A_CHAVE_ANON_OU_PUBLISHABLE',
+  supabaseUrl: 'https://ewuxkeebclcieceirwsr.supabase.co',
+  supabaseKey: 'sb_publishable_VdYPbKHSGOSOL9npqSVVVw_ne_jo-Ca',
   appName: 'Gestor Financeiro',
 };
